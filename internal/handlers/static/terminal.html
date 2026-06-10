@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Container Terminal</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: Arial, sans-serif;
+    }
+
+    header {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid #30363d;
+      background: #161b22;
+    }
+
+    #title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    #status {
+      margin-left: auto;
+      font-size: 12px;
+      color: #8b949e;
+    }
+
+    #terminal {
+      flex: 1;
+      padding: 10px;
+    }
+
+    footer {
+      height: 28px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      border-top: 1px solid #30363d;
+      background: #161b22;
+      font-size: 11px;
+      color: #8b949e;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <div id="title">Container Terminal</div>
+    <div id="status">Starting...</div>
+  </header>
+
+  <div id="terminal"></div>
+
+  <footer>
+    Interactive Container Session
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+
+  <script>
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: 14,
+      theme: {
+        background: '#0d1117',
+        foreground: '#e6edf3'
+      }
+    });
+
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(document.getElementById('terminal'));
+    fitAddon.fit();
+
+    const params = new URLSearchParams(location.search);
+    let sessionKey = params.get('session');
+    const image = params.get('image') || 'alpine';
+    let ws;
+
+    function setStatus(text) {
+      document.getElementById('status').textContent = text;
+    }
+
+    async function startSession() {
+      setStatus('Starting container...');
+      term.writeln('Starting container...');
+
+      try {
+        const res = await fetch(`/dev/sessions/start?image=${encodeURIComponent(image)}`, {
+          method: 'POST'
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to start session');
+        }
+
+        sessionKey = data.session_key;
+
+        term.writeln('');
+        term.writeln('Container Ready');
+        term.writeln(`Image: ${data.image}`);
+        term.writeln('');
+
+        connectWS();
+      }
+      catch (err) {
+        setStatus('Error');
+        term.writeln('Error: ' + err.message);
+      }
+    }
+
+    function connectWS() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+      ws = new WebSocket(
+        `${proto}//${location.host}/ws/dev/terminal/${sessionKey}`
+      );
+
+      ws.onopen = () => {
+        setStatus('Connected');
+        sendResize();
+      };
+
+      ws.onmessage = (evt) => {
+        const msg = JSON.parse(evt.data);
+
+        if (msg.type === 'output') {
+          term.write(msg.data);
+        }
+
+        if (msg.type === 'error') {
+          term.writeln('\\r\\nError: ' + msg.error);
+        }
+      };
+
+      ws.onclose = () => setStatus('Disconnected');
+      ws.onerror = () => setStatus('Connection Error');
+
+      term.onData(data => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'input',
+            data: data
+          }));
+        }
+      });
+
+      term.onResize(({ cols, rows }) => {
+        sendResize(cols, rows);
+      });
+    }
+
+    function sendResize(cols, rows) {
+      cols = cols || term.cols;
+      rows = rows || term.rows;
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'resize',
+          cols,
+          rows
+        }));
+      }
+    }
+
+    window.addEventListener('resize', () => fitAddon.fit());
+
+    if (sessionKey) {
+      connectWS();
+    } else {
+      startSession();
+    }
+  </script>
+
+</body>
+
+</html>
