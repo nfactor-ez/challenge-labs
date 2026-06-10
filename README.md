@@ -5,8 +5,8 @@ A proof-of-concept backend and frontend for containerized challenge sessions.
 This repository includes:
 - A Go backend API server with Docker-based terminal session support.
 - A static HTML/CSS/JS frontend to launch challenge sessions and connect to a live terminal.
-- A Docker Compose setup to run PostgreSQL, the API, and the frontend together.
-- Local development support using `memory` session store or PostgreSQL.
+- A Docker Compose setup to run the API and the frontend together.
+- Local development support using `memory` session store.
 
 > Note: `.env` is included in this repository for this proof of concept. It is not currently holding highly sensitive data, but it should be replaced or secured before production use.
 
@@ -61,7 +61,7 @@ docker compose version
 
 - `Docker Desktop` for Windows/macOS
 - `PowerShell`, `Git Bash`, or Terminal
-- `localhost` access to ports `3000`, `8081`, and `5433`
+- `localhost` access to ports `3000` and `8081`
 
 ### Clone the repository
 
@@ -73,7 +73,7 @@ cd challenge-labs
 ### Important files
 
 - `Dockerfile` — backend container image builder
-- `docker-compose.yml` — orchestration for frontend, backend, and PostgreSQL
+- `docker-compose.yml` — orchestration for frontend and backend
 - `.env` — development environment variables for the backend
 - `frontend/Dockerfile` — static frontend container
 - `frontend/index.html` — frontend page
@@ -93,7 +93,6 @@ docker compose up --build
 
 This command:
 - builds the backend and frontend Docker images
-- starts PostgreSQL in `cl_postgres`
 - starts the Go API backend in `cl_api`
 - starts the frontend web app in `cl_frontend`
 
@@ -106,7 +105,6 @@ This command:
 
 - `cl_frontend` → exposed on host `3000`
 - `cl_api` → exposed on host `8081`, internal container port `8080`
-- `cl_postgres` → exposed on host `5433`, internal container port `5432`
 
 ### Run backend manually
 
@@ -145,23 +143,13 @@ Important `.env` values:
 
 - `SERVER_PORT=8080`
 - `ENV=development`
-- `STORE=postgres`
-- `DB_HOST=localhost`
-- `DB_PORT=5433`
-- `DB_USER=postgres`
-- `DB_PASSWORD=postgres`
-- `DB_NAME=challengelabs`
+- `STORE=memory`
 - `JWT_SECRET=challengelabs-super-secret-key-change-in-prod-2024`
 - `ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173`
 
-### Changing the database mode
+### Storage mode
 
-The backend supports two storage modes:
-
-- `STORE=postgres` — uses PostgreSQL (recommended for this demo)
-- `STORE=memory` — no database required
-
-To run without PostgreSQL, set:
+The backend is configured to run in memory-backed mode for this POC:
 
 ```bash
 STORE=memory
@@ -208,7 +196,6 @@ If a port is already in use, stop the conflicting process or change the port map
 
 - `3000` → frontend
 - `8081` → backend API
-- `5433` → PostgreSQL
 
 ### Backend startup issues
 
