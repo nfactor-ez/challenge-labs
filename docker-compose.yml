@@ -1,24 +1,5 @@
 services:
 
-  # ── PostgreSQL ──────────────────────────────────────────────────────────────
-  postgres:
-    image: postgres:16-alpine
-    container_name: cl_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER:     ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB:       ${DB_NAME:-challengelabs}
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-challengelabs}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   # ── ChallengeLabs API server ────────────────────────────────────────────────
   api:
     build:
@@ -26,18 +7,10 @@ services:
       dockerfile: Dockerfile
     container_name: cl_api
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
       ENV:                             development
       SERVER_PORT:                     8080
-      STORE:                           postgres
-      DB_HOST:                         postgres
-      DB_PORT:                         5432
-      DB_USER:                         ${DB_USER:-postgres}
-      DB_PASSWORD:                     ${DB_PASSWORD:-postgres}
-      DB_NAME:                         ${DB_NAME:-challengelabs}
+      STORE:                           memory
       JWT_SECRET:                      ${JWT_SECRET:-change-me-in-production}
       DOCKER_HOST:                     unix:///var/run/docker.sock
       CONTAINER_MAX_LIFETIME_MINUTES:  60
@@ -65,5 +38,3 @@ services:
     ports:
       - "3000:80"
 
-volumes:
-  postgres_data:
