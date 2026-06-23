@@ -1,6 +1,8 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM golang:1.25-alpine AS builder
 
+ENV GOTOOLCHAIN=auto
+
 # Install build dependencies (gcc required by cgo-free builds; git for module cache)
 RUN apk add --no-cache git ca-certificates tzdata
 
