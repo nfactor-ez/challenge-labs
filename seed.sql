@@ -6,14 +6,22 @@
 -- Enable pgcrypto for bcrypt (used by the Go app)
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- ─── Admin user ───────────────────────────────────────────────────────────────
--- Password: admin123
--- CHANGE THIS PASSWORD after first login!
+-- ─── Admin users ──────────────────────────────────────────────────────────────
+-- Password: admin123  (default admin — change after first login!)
 INSERT INTO users (username, email, password_hash, role)
 VALUES (
   'admin',
   'admin@challengelabs.local',
   crypt('admin123', gen_salt('bf')),
+  'admin'
+) ON CONFLICT DO NOTHING;
+
+-- Password: test1234
+INSERT INTO users (username, email, password_hash, role)
+VALUES (
+  'test123',
+  'test123@gmail.com',
+  crypt('test1234', gen_salt('bf')),
   'admin'
 ) ON CONFLICT DO NOTHING;
 
