@@ -11,6 +11,8 @@ services:
       POSTGRES_DB:       challengelabs
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
     ports:
       - "5433:5432"
     healthcheck:
