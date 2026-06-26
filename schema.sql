@@ -2,6 +2,10 @@
 -- ChallengeLabs — PostgreSQL Schema
 -- Generated from GORM models in internal/models/models.go
 -- Run with: psql -U postgres -d challengelabs -f schema.sql
+--
+-- NOTE: All IDs use BIGSERIAL/BIGINT to match GORM's uint→bigint
+-- mapping. Using INTEGER here causes GORM auto-migrate to try
+-- altering columns, which fails if views depend on them.
 -- ═══════════════════════════════════════════════════════════
 
 -- ─── Extensions ───────────────────────────────────────────────────────────────
@@ -9,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ─── Users ────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
-    id            SERIAL PRIMARY KEY,
+    id            BIGSERIAL PRIMARY KEY,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at    TIMESTAMPTZ,          -- soft-delete via GORM
@@ -28,7 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_users_email        ON users(email);
 
 -- ─── Categories ───────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS categories (
-    id          SERIAL PRIMARY KEY,
+    id          BIGSERIAL PRIMARY KEY,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     name        VARCHAR(100) NOT NULL UNIQUE,
@@ -40,7 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
 
 -- ─── Challenges ───────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS challenges (
-    id           SERIAL PRIMARY KEY,
+    id           BIGSERIAL PRIMARY KEY,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at   TIMESTAMPTZ,          -- soft-delete via GORM
@@ -50,13 +54,13 @@ CREATE TABLE IF NOT EXISTS challenges (
     description  TEXT,
     difficulty   VARCHAR(20)  NOT NULL
                    CHECK (difficulty IN ('easy', 'medium', 'hard')),
-    points       INTEGER      NOT NULL DEFAULT 100,
+    points       BIGINT       NOT NULL DEFAULT 100,
     docker_image VARCHAR(300) NOT NULL,
     flag         VARCHAR(500) NOT NULL,  -- bcrypt-hashed before storage
     tags         VARCHAR(500),           -- comma-separated tag list
     is_published BOOLEAN      NOT NULL DEFAULT FALSE,
 
-    category_id  INTEGER NOT NULL
+    category_id  BIGINT NOT NULL
                    REFERENCES categories(id)
                    ON UPDATE CASCADE
                    ON DELETE RESTRICT
@@ -70,12 +74,12 @@ CREATE INDEX IF NOT EXISTS idx_challenges_is_published ON challenges(is_publishe
 -- ─── Tasks ────────────────────────────────────────────────────────────────────
 -- Step-by-step guidance attached to a challenge. Ordered by `order` ASC.
 CREATE TABLE IF NOT EXISTS tasks (
-    id           SERIAL PRIMARY KEY,
+    id           BIGSERIAL PRIMARY KEY,
 
-    challenge_id INTEGER  NOT NULL
+    challenge_id BIGINT  NOT NULL
                    REFERENCES challenges(id)
                    ON DELETE CASCADE,   -- tasks are removed when challenge is deleted
-    "order"      INTEGER  NOT NULL,
+    "order"      BIGINT  NOT NULL,
     title        VARCHAR(300) NOT NULL,
     description  TEXT,
     is_required  BOOLEAN  NOT NULL DEFAULT TRUE
@@ -87,15 +91,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_challenge_order ON tasks(challenge_i
 -- ─── Sessions ─────────────────────────────────────────────────────────────────
 -- One session = one Docker container instance for a user+challenge pair.
 CREATE TABLE IF NOT EXISTS sessions (
-    id             SERIAL PRIMARY KEY,
+    id             BIGSERIAL PRIMARY KEY,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at     TIMESTAMPTZ,          -- soft-delete via GORM
 
-    user_id        INTEGER NOT NULL
+    user_id        BIGINT NOT NULL
                      REFERENCES users(id)
                      ON DELETE CASCADE,
-    challenge_id   INTEGER
+    challenge_id   BIGINT
                      REFERENCES challenges(id)
                      ON DELETE SET NULL,
     container_id   VARCHAR(100),         -- Docker container ID (64-char hex)
@@ -119,19 +123,19 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires_at    ON sessions(expires_at);
 -- Tracks completion state and points awarded per user-challenge pair.
 -- Unique constraint ensures one record per (user, challenge).
 CREATE TABLE IF NOT EXISTS user_progresses (
-    id              SERIAL PRIMARY KEY,
+    id              BIGSERIAL PRIMARY KEY,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    user_id         INTEGER NOT NULL
+    user_id         BIGINT NOT NULL
                       REFERENCES users(id)
                       ON DELETE CASCADE,
-    challenge_id    INTEGER NOT NULL
+    challenge_id    BIGINT NOT NULL
                       REFERENCES challenges(id)
                       ON DELETE CASCADE,
     completed       BOOLEAN NOT NULL DEFAULT FALSE,
     flag_submitted  BOOLEAN NOT NULL DEFAULT FALSE,
-    points_awarded  INTEGER NOT NULL DEFAULT 0,
+    points_awarded  BIGINT  NOT NULL DEFAULT 0,
     completed_at    TIMESTAMPTZ,
 
     CONSTRAINT uq_user_challenge UNIQUE (user_id, challenge_id)
@@ -141,7 +145,7 @@ CREATE INDEX IF NOT EXISTS idx_user_progresses_user_id      ON user_progresses(u
 CREATE INDEX IF NOT EXISTS idx_user_progresses_challenge_id ON user_progresses(challenge_id);
 CREATE INDEX IF NOT EXISTS idx_user_progresses_completed    ON user_progresses(completed);
 
--- ─── Views (optional helpers) ─────────────────────────────────────────────────
+-- ─── Views ────────────────────────────────────────────────────────────────────
 
 -- Leaderboard view: total points + challenges solved per user
 CREATE OR REPLACE VIEW leaderboard AS
@@ -149,22 +153,11 @@ SELECT
     u.id         AS user_id,
     u.username,
     u.avatar_url,
-    COALESCE(SUM(up.points_awarded), 0)::INTEGER AS total_points,
-    COUNT(up.id)::INTEGER                        AS challenges_solved,
+    COALESCE(SUM(up.points_awarded), 0)::BIGINT AS total_points,
+    COUNT(up.id)::BIGINT                        AS challenges_solved,
     RANK() OVER (ORDER BY COALESCE(SUM(up.points_awarded), 0) DESC) AS rank
 FROM users u
 LEFT JOIN user_progresses up ON up.user_id = u.id AND up.completed = TRUE
 WHERE u.deleted_at IS NULL
 GROUP BY u.id, u.username, u.avatar_url
 ORDER BY total_points DESC;
-
--- ─── Seed: initial admin user ─────────────────────────────────────────────────
--- Password: changeme123 (bcrypt cost 10)
--- IMPORTANT: Change this password immediately after first login!
--- INSERT INTO users (username, email, password_hash, role)
--- VALUES (
---   'admin',
---   'admin@challengelabs.local',
---   '$2a$10$examplehashchangeme',
---   'admin'
--- ) ON CONFLICT DO NOTHING;
