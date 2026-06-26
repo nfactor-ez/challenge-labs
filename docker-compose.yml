@@ -21,6 +21,17 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── Challenge images (built locally, used by the API to spawn containers) ─────
+  # Builds the challenge Docker image and immediately exits.
+  # The API uses the Docker socket to spin up challenge containers on demand.
+  challengelabs-nginx:
+    build:
+      context: ./challenges/nginx-port-discovery
+      dockerfile: Dockerfile
+    image: challengelabs-nginx:latest
+    entrypoint: ["true"]              # exits immediately after build; no container stays running
+    restart: "no"
+
   # ── ChallengeLabs API server ─────────────────────────────────────────────────
   api:
     build:
@@ -71,3 +82,4 @@ services:
 
 volumes:
   postgres_data:
+
