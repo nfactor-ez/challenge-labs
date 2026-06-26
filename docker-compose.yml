@@ -1,5 +1,24 @@
 services:
 
+  # ── PostgreSQL database ───────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: cl_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB:       challengelabs
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d challengelabs"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # ── ChallengeLabs API server ─────────────────────────────────────────────────
   api:
     build:
@@ -7,14 +26,15 @@ services:
       dockerfile: Dockerfile
     container_name: cl_api
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       ENV:                             development
       SERVER_PORT:                     8080
       STORE:                           postgres
-      # host.docker.internal resolves to the Windows host — cl_postgres is
-      # exposed there on port 5433 (mapped from its internal 5432)
-      DB_HOST:                         host.docker.internal
-      DB_PORT:                         5433
+      DB_HOST:                         postgres
+      DB_PORT:                         5432
       DB_USER:                         postgres
       DB_PASSWORD:                     postgres
       DB_NAME:                         challengelabs
@@ -46,3 +66,6 @@ services:
         condition: service_healthy
     ports:
       - "3000:80"
+
+volumes:
+  postgres_data:
