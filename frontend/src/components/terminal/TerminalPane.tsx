@@ -1,11 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { sessionsApi } from '../../api/sessions';
 import type { ContainerStats, Session } from '../../api/types';
 import { Spinner } from '../ui';
-import { Clock, Cpu, MemoryStick, X, Maximize2, Minimize2 } from 'lucide-react';
+import { Clock, Cpu, MemoryStick, X, Maximize2, Minimize2, GripHorizontal } from 'lucide-react';
 
 interface TerminalPaneProps {
   session: Session;
@@ -24,18 +24,62 @@ function formatCountdown(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+const MIN_HEIGHT = 280;
+const MAX_HEIGHT = 1000;
+const DEFAULT_HEIGHT = 580;
+
 export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const initDoneRef = useRef(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
   const [connected, setConnected] = useState(false);
   const [stats, setStats] = useState<ContainerStats | null>(null);
   const [remaining, setRemaining] = useState(session.remaining);
   const [expanded, setExpanded] = useState(false);
+  const [height, setHeight] = useState(DEFAULT_HEIGHT);
 
-  // Countdown timer
+  // ── Drag-to-resize ────────────────────────────────────────────────────────
+  const isDragging = useRef(false);
+  const dragStartY = useRef(0);
+  const dragStartH = useRef(0);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    dragStartY.current = e.clientY;
+    dragStartH.current = height;
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  }, [height]);
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      const delta = dragStartY.current - e.clientY; // drag up = bigger
+      const newH = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, dragStartH.current + delta));
+      setHeight(newH);
+      setTimeout(() => { try { fitRef.current?.fit(); } catch { /* ignore */ } }, 0);
+    };
+    const onMouseUp = () => {
+      if (!isDragging.current) return;
+      isDragging.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      setTimeout(() => { try { fitRef.current?.fit(); } catch { /* ignore */ } }, 50);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+
+  // ── Countdown timer ───────────────────────────────────────────────────────
   useEffect(() => {
     if (remaining <= 0) return;
     const interval = setInterval(() => {
@@ -44,7 +88,7 @@ export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
     return () => clearInterval(interval);
   }, []);
 
-  // Stats polling
+  // ── Stats polling ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!connected) return;
     const poll = async () => {
@@ -58,14 +102,14 @@ export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
     return () => clearInterval(interval);
   }, [connected, session.session_key]);
 
-  // Re-fit when expanded state changes
+  // ── Re-fit on expand / height change ─────────────────────────────────────
   useEffect(() => {
     setTimeout(() => {
       try { fitRef.current?.fit(); } catch { /* ignore */ }
-    }, 100);
-  }, [expanded]);
+    }, 120);
+  }, [expanded, height]);
 
-  // Initialize terminal + WebSocket — useLayoutEffect ensures DOM is ready
+  // ── Initialize terminal + WebSocket ───────────────────────────────────────
   useLayoutEffect(() => {
     if (!terminalRef.current || initDoneRef.current) return;
     initDoneRef.current = true;
@@ -100,7 +144,7 @@ export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
       cursorBlink: true,
       cursorStyle: 'bar',
       allowProposedApi: true,
-      scrollback: 2000,
+      scrollback: 5000,
     });
 
     const fit = new FitAddon();
@@ -125,7 +169,6 @@ export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
       setConnected(true);
       term.writeln('\x1b[2;32m[ChallengeLabs] Terminal session established\x1b[0m');
       term.writeln('\x1b[2;90m─────────────────────────────────────\x1b[0m');
-      // send initial resize
       setTimeout(() => {
         try { fit.fit(); } catch { /* ignore */ }
         if (ws.readyState === WebSocket.OPEN) {
@@ -135,12 +178,10 @@ export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
     };
 
     ws.onmessage = (e) => {
-      // ── Parse the JSON envelope the server sends ──────────────────────────
       try {
         const msg = JSON.parse(e.data as string);
         switch (msg.type) {
           case 'output':
-            // msg.data is the raw terminal output (may contain ANSI codes)
             term.write(msg.data);
             break;
           case 'expiry':
@@ -149,10 +190,8 @@ export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
           case 'error':
             term.writeln(`\x1b[1;31m[Error] ${msg.message ?? 'unknown error'}\x1b[0m`);
             break;
-          // ignore unknown types silently
         }
       } catch {
-        // Fallback: server sent raw text (not JSON) — write it directly
         term.write(e.data as string);
       }
     };
@@ -166,21 +205,18 @@ export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
       setConnected(false);
     };
 
-    // Send keystrokes wrapped in the JSON protocol
     term.onData((data) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'input', data }));
       }
     });
 
-    // Send resize events
     term.onResize(({ cols, rows }) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'resize', cols, rows }));
       }
     });
 
-    // Resize observer — refit whenever the container changes size
     const ro = new ResizeObserver(() => {
       try { fit.fit(); } catch { /* ignore */ }
     });
@@ -197,18 +233,30 @@ export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
   const countdownClass =
     remaining < 300 ? 'critical' : remaining < 600 ? 'warning' : '';
 
-  const terminalHeight = expanded ? 'calc(100vh - 200px)' : '420px';
+  const terminalHeight = expanded ? 'calc(100vh - 180px)' : `${height}px`;
 
   return (
     <div
+      ref={wrapperRef}
       className="terminal-wrapper"
       style={{
         display: 'flex',
         flexDirection: 'column',
         height: terminalHeight,
-        transition: 'height 250ms cubic-bezier(0.4,0,0.2,1)',
+        transition: expanded ? 'height 250ms cubic-bezier(0.4,0,0.2,1)' : undefined,
       }}
     >
+      {/* Drag resize handle — only when not fullscreen */}
+      {!expanded && (
+        <div
+          className="terminal-resize-handle"
+          onMouseDown={onMouseDown}
+          title="Drag to resize"
+        >
+          <GripHorizontal size={14} style={{ opacity: 0.4 }} />
+        </div>
+      )}
+
       {/* Title bar */}
       <div className="terminal-titlebar">
         <div className="terminal-dots">
@@ -223,22 +271,22 @@ export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
           {!connected && <Spinner size="sm" />}
           <button
             onClick={() => setExpanded(e => !e)}
-            title={expanded ? 'Collapse terminal' : 'Expand terminal'}
+            title={expanded ? 'Collapse terminal' : 'Fullscreen terminal'}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               color: 'rgba(255,255,255,0.4)', display: 'flex',
               padding: '2px',
               transition: 'color 150ms',
             }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.8)')}
+            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.9)')}
             onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}
           >
-            {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
         </div>
       </div>
 
-      {/* xterm.js container — takes all remaining height */}
+      {/* xterm.js container */}
       <div
         className="terminal-body"
         ref={terminalRef}

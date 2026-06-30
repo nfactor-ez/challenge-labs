@@ -346,18 +346,23 @@ export function ChallengeDetailPage() {
               </div>
             </div>
 
-            {/* Terminal — RIGHT PANEL */}
-            {session && (
-              <div>
-                <div className="section-title" style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <TerminalIcon size={11} />
-                  Live Terminal
-                </div>
-                <TerminalPane session={session} onTerminate={handleTerminate} />
-              </div>
-            )}
+
           </div>
         </div>
+
+        {/* Terminal — FULL WIDTH below the layout */}
+        {session && (
+          <div style={{ marginTop: 24 }}>
+            <div className="section-title" style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7 }}>
+              <TerminalIcon size={13} />
+              Live Terminal
+              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginLeft: 4 }}>
+                — drag top edge to resize
+              </span>
+            </div>
+            <TerminalPane session={session} onTerminate={handleTerminate} />
+          </div>
+        )}
       </div>
     </AppShell>
   );

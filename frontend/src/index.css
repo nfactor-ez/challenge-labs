@@ -994,6 +994,24 @@ select.input { cursor: pointer; }
   box-shadow: var(--shadow-lg);
 }
 
+.terminal-resize-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  background: #0a0a16;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  cursor: ns-resize;
+  flex-shrink: 0;
+  transition: background 150ms;
+  color: rgba(255,255,255,0.3);
+}
+.terminal-resize-handle:hover {
+  background: #12121e;
+  color: rgba(185,242,40,0.6);
+}
+
+
 .terminal-titlebar {
   display: flex;
   align-items: center;
