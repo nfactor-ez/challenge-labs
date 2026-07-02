@@ -200,10 +200,12 @@ a:hover { opacity: 0.8; }
   background: var(--bg-primary);
 }
 
-/* Split mode — fills full viewport height, no scroll on body */
+/* Split mode — fills full viewport height */
 .app-main--split {
   height: 100vh;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .page-content {
@@ -234,7 +236,7 @@ a:hover { opacity: 0.8; }
   display: flex;
   flex: 1;
   overflow: hidden;
-  height: calc(100vh - 48px);
+  min-height: 0;
 }
 
 /* Left scrollable panel */
@@ -288,6 +290,7 @@ a:hover { opacity: 0.8; }
   background: #080810;
   overflow: hidden;
   min-width: 0;
+  height: 100%;
 }
 
 /* Terminal fills the right panel entirely */

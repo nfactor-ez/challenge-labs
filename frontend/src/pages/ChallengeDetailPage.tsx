@@ -209,7 +209,10 @@ export function ChallengeDetailPage() {
       <div className="challenge-split-body" ref={containerRef}>
 
         {/* LEFT — scrollable info panel */}
-        <div className="challenge-split-left" style={{ width: `${leftPct}%` }}>
+        <div
+          className="challenge-split-left"
+          style={{ width: terminalVisible ? `${leftPct}%` : '100%' }}
+        >
 
           {/* Description */}
           <div className="split-section">
@@ -277,15 +280,25 @@ export function ChallengeDetailPage() {
             <div className="split-section-title">Container</div>
             {session ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div className="flex gap-2 items-center">
-                  <div style={{
-                    width: 7, height: 7, borderRadius: '50%',
-                    background: session.status === 'active' ? 'var(--accent)' : 'var(--warning-text)',
-                    boxShadow: session.status === 'active' ? '0 0 6px var(--accent)' : 'none',
-                  }} />
-                  <span className="text-sm font-mono" style={{ color: 'var(--accent)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                    {session.status}
-                  </span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div className="flex gap-2 items-center">
+                    <div style={{
+                      width: 7, height: 7, borderRadius: '50%',
+                      background: session.status === 'active' ? 'var(--accent)' : 'var(--warning-text)',
+                      boxShadow: session.status === 'active' ? '0 0 6px var(--accent)' : 'none',
+                    }} />
+                    <span className="text-sm font-mono" style={{ color: 'var(--accent)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                      {session.status}
+                    </span>
+                  </div>
+                  {/* Open Terminal button — shown when terminal panel is hidden */}
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => setTerminalVisible(true)}
+                    style={{ gap: 6, display: terminalVisible ? 'none' : 'flex' }}
+                  >
+                    <TerminalIcon size={13} /> Open Terminal
+                  </button>
                 </div>
                 {session.container_ip && (
                   <div className="text-xs text-muted font-mono">IP: {session.container_ip}</div>
