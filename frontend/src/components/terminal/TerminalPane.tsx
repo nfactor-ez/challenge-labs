@@ -10,6 +10,7 @@ import { Clock, Cpu, MemoryStick, X, Maximize2, Minimize2, GripHorizontal } from
 interface TerminalPaneProps {
   session: Session;
   onTerminate: () => void;
+  fillHeight?: boolean;
 }
 
 function formatBytes(bytes: number): string {
@@ -28,7 +29,7 @@ const MIN_HEIGHT = 280;
 const MAX_HEIGHT = 1000;
 const DEFAULT_HEIGHT = 580;
 
-export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
+export function TerminalPane({ session, onTerminate, fillHeight = false }: TerminalPaneProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -233,7 +234,7 @@ export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
   const countdownClass =
     remaining < 300 ? 'critical' : remaining < 600 ? 'warning' : '';
 
-  const terminalHeight = expanded ? 'calc(100vh - 180px)' : `${height}px`;
+  const terminalHeight = fillHeight ? '100%' : expanded ? 'calc(100vh - 180px)' : `${height}px`;
 
   return (
     <div
@@ -246,8 +247,8 @@ export function TerminalPane({ session, onTerminate }: TerminalPaneProps) {
         transition: expanded ? 'height 250ms cubic-bezier(0.4,0,0.2,1)' : undefined,
       }}
     >
-      {/* Drag resize handle — only when not fullscreen */}
-      {!expanded && (
+      {/* Drag resize handle — only in standalone (non-fill) mode */}
+      {!expanded && !fillHeight && (
         <div
           className="terminal-resize-handle"
           onMouseDown={onMouseDown}
