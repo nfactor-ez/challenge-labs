@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Play, Flag, CheckCircle2, XCircle, Tag,
-  Terminal as TerminalIcon, ChevronDown, ChevronUp
+  Terminal as TerminalIcon, ChevronDown, ChevronUp, Sun, Moon, PanelRightClose, PanelRightOpen
 } from 'lucide-react';
 import { AppShell } from '../components/layout/AppShell';
 import { TopBar } from '../components/layout/TopBar';
@@ -11,6 +11,7 @@ import { TerminalPane } from '../components/terminal/TerminalPane';
 import { challengesApi } from '../api/challenges';
 import { sessionsApi } from '../api/sessions';
 import { useToast } from '../context/ToastContext';
+import { useTheme } from '../context/ThemeContext';
 import type { Challenge, UserProgress, Session } from '../api/types';
 import { ApiError } from '../api/types';
 
@@ -68,6 +69,8 @@ export function ChallengeDetailPage() {
   const [flagResult, setFlagResult] = useState<{ correct: boolean; message: string } | null>(null);
   const [flagLoading, setFlagLoading] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(true);
+  const [terminalVisible, setTerminalVisible] = useState(true);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const { leftPct, containerRef, onMouseDown } = useSplitPane(42);
 
@@ -166,7 +169,7 @@ export function ChallengeDetailPage() {
         <button className="btn btn-ghost btn-icon btn-sm" onClick={() => navigate('/challenges')}>
           <ArrowLeft size={15} />
         </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
           <h1 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
             {challenge.title}
           </h1>
@@ -182,6 +185,23 @@ export function ChallengeDetailPage() {
               <CheckCircle2 size={11} /> Completed · +{progress.points_awarded}pts
             </span>
           )}
+        </div>
+        {/* Top-right controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+          <button
+            className="btn btn-ghost btn-icon btn-sm"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
+          <button
+            className="btn btn-ghost btn-icon btn-sm"
+            onClick={() => setTerminalVisible(v => !v)}
+            title={terminalVisible ? 'Hide terminal' : 'Show terminal'}
+          >
+            {terminalVisible ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+          </button>
         </div>
       </div>
 
@@ -341,29 +361,33 @@ export function ChallengeDetailPage() {
           </div>
         </div>
 
-        {/* DIVIDER */}
-        <div className="challenge-split-divider" onMouseDown={onMouseDown}>
-          <div className="split-divider-handle" />
-        </div>
+        {/* DIVIDER — hide when terminal is hidden */}
+        {terminalVisible && (
+          <div className="challenge-split-divider" onMouseDown={onMouseDown}>
+            <div className="split-divider-handle" />
+          </div>
+        )}
 
         {/* RIGHT — terminal panel */}
-        <div className="challenge-split-right" style={{ width: `${100 - leftPct}%` }}>
-          {session ? (
-            <TerminalPane session={session} onTerminate={handleTerminate} fillHeight />
-          ) : (
-            <div className="split-terminal-placeholder">
-              <div className="split-placeholder-inner">
-                <TerminalIcon size={36} style={{ color: 'rgba(185,242,40,0.15)', marginBottom: 16 }} />
-                <div style={{ color: 'rgba(255,255,255,0.2)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
-                  Terminal will appear here
-                </div>
-                <div style={{ color: 'rgba(255,255,255,0.1)', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', marginTop: 8 }}>
-                  Start a container session on the left →
+        {terminalVisible && (
+          <div className="challenge-split-right" style={{ width: `${100 - leftPct}%` }}>
+            {session ? (
+              <TerminalPane session={session} onTerminate={handleTerminate} fillHeight />
+            ) : (
+              <div className="split-terminal-placeholder">
+                <div className="split-placeholder-inner">
+                  <TerminalIcon size={36} style={{ color: 'rgba(185,242,40,0.15)', marginBottom: 16 }} />
+                  <div style={{ color: 'rgba(255,255,255,0.2)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                    Terminal will appear here
+                  </div>
+                  <div style={{ color: 'rgba(255,255,255,0.1)', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', marginTop: 8 }}>
+                    Start a container session on the left →
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </AppShell>
   );
