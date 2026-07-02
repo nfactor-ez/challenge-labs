@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { AppShell } from '../components/layout/AppShell';
 import { TopBar } from '../components/layout/TopBar';
-import { LoadingState, DifficultyBadge, Spinner, Badge } from '../components/ui';
+import { LoadingState, DifficultyBadge, Spinner } from '../components/ui';
 import { TerminalPane } from '../components/terminal/TerminalPane';
 import { challengesApi } from '../api/challenges';
 import { sessionsApi } from '../api/sessions';
