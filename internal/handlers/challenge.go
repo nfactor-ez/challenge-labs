@@ -17,15 +17,18 @@ import (
 type ChallengeHandler struct {
 	challengeRepo *repository.ChallengeRepository
 	progressRepo  *repository.ProgressRepository
+	userRepo      *repository.UserRepository
 }
 
 func NewChallengeHandler(
 	challengeRepo *repository.ChallengeRepository,
 	progressRepo *repository.ProgressRepository,
+	userRepo *repository.UserRepository,
 ) *ChallengeHandler {
 	return &ChallengeHandler{
 		challengeRepo: challengeRepo,
 		progressRepo:  progressRepo,
+		userRepo:      userRepo,
 	}
 }
 
@@ -47,11 +50,30 @@ func (h *ChallengeHandler) List(c *gin.Context) {
 // ─── Get ──────────────────────────────────────────────────────────────────────
 
 // Get returns a single challenge by ID or slug, along with user progress.
+// Premium challenges return 403 for non-premium users.
 func (h *ChallengeHandler) Get(c *gin.Context) {
 	challenge, ok := h.resolveChallenge(c)
 	if !ok {
 		return
 	}
+
+	// Premium access gate
+	if challenge.IsPremium {
+		role, _ := c.Get(middleware.ContextRole)
+		if role != "admin" {
+			userID := middleware.GetUserID(c)
+			user, _ := h.userRepo.FindByID(userID)
+			if user == nil || !user.IsPremium {
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":      "premium_required",
+					"message":    "This challenge requires a Premium subscription.",
+					"is_premium": false,
+				})
+				return
+			}
+		}
+	}
+
 	userID := middleware.GetUserID(c)
 	progress, _ := h.progressRepo.FindOne(userID, challenge.ID)
 	c.JSON(http.StatusOK, gin.H{"challenge": challenge, "progress": progress})
@@ -70,6 +92,7 @@ type createChallengeRequest struct {
 	Tags        string            `json:"tags"`
 	CategoryID  uint              `json:"category_id"  binding:"required"`
 	IsPublished bool              `json:"is_published"`
+	IsPremium   bool              `json:"is_premium"`
 	Tasks       []createTaskRequest `json:"tasks"`
 }
 
@@ -105,6 +128,7 @@ func (h *ChallengeHandler) Create(c *gin.Context) {
 		Tags:        req.Tags,
 		CategoryID:  req.CategoryID,
 		IsPublished: req.IsPublished,
+		IsPremium:   req.IsPremium,
 	}
 
 	for i, t := range req.Tasks {
@@ -145,6 +169,7 @@ func (h *ChallengeHandler) Update(c *gin.Context) {
 	challenge.DockerImage = req.DockerImage
 	challenge.Tags = req.Tags
 	challenge.IsPublished = req.IsPublished
+	challenge.IsPremium = req.IsPremium
 
 	if req.Flag != "" {
 		hash, _ := bcrypt.GenerateFromPassword([]byte(strings.TrimSpace(req.Flag)), bcrypt.DefaultCost)

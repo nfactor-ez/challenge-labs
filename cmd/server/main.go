@@ -12,7 +12,9 @@ import (
 	"challengelabs/backend/config"
 	"challengelabs/backend/internal/auth"
 	"challengelabs/backend/internal/container"
+	"challengelabs/backend/internal/email"
 	"challengelabs/backend/internal/handlers"
+	"challengelabs/backend/internal/otp"
 	"challengelabs/backend/internal/repository"
 	"challengelabs/backend/internal/scheduler"
 	"challengelabs/backend/internal/session"
@@ -39,6 +41,8 @@ func main() {
 	var challengeRepo *repository.ChallengeRepository
 	var progressRepo  *repository.ProgressRepository
 	var categoryRepo  *repository.CategoryRepository
+	var otpRepo       *repository.OTPRepository
+	var settingsRepo  *repository.SettingsRepository
 
 	switch cfg.Store {
 
@@ -64,6 +68,8 @@ func main() {
 		categoryRepo  = repository.NewCategoryRepository(db)
 		sessionRepo   := repository.NewSessionRepository(db)
 		progressRepo  = repository.NewProgressRepository(db)
+		otpRepo       = repository.NewOTPRepository(db)
+		settingsRepo  = repository.NewSettingsRepository(db)
 		store         = sessionRepo // *SessionRepository satisfies session.Store
 		logger.Info("Session store: PostgreSQL")
 	}
@@ -83,6 +89,18 @@ func main() {
 
 	hub := ws.NewHub()
 
+	// OTP / Email services
+	mailer := email.NewMailer(cfg.SMTP)
+	if mailer.IsConfigured() {
+		logger.Info("SMTP configured", "host", cfg.SMTP.Host, "port", cfg.SMTP.Port, "user", cfg.SMTP.User, "from", cfg.SMTP.From)
+	} else {
+		logger.Warn("SMTP not configured — OTP emails will fail. Set SMTP_USER and SMTP_PASSWORD.")
+	}
+	var otpSvc *otp.Service
+	if otpRepo != nil {
+		otpSvc = otp.NewService(otpRepo, mailer)
+	}
+
 	// ── 5. Background scheduler ────────────────────────────────────────────
 	sched := scheduler.New(store, containerMgr, hub, cfg)
 	sched.Start()
@@ -99,6 +117,8 @@ func main() {
 		progressRepo,
 		containerMgr,
 		hub,
+		otpSvc,
+		settingsRepo,
 	)
 
 	// ── 7. HTTP server with graceful shutdown ──────────────────────────────

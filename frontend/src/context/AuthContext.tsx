@@ -6,8 +6,7 @@ import type { User } from '../api/types';
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (username: string, email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<{ mfa_required?: boolean; temp_token?: string }>;
   logout: () => void;
   refreshUser: () => Promise<void>;
   isAdmin: boolean;
@@ -39,13 +38,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser]);
 
   const login = async (email: string, password: string) => {
-    const { user } = await authApi.login({ email, password });
-    setUser(user);
-  };
-
-  const register = async (username: string, email: string, password: string) => {
-    const { user } = await authApi.register({ username, email, password });
-    setUser(user);
+    const res = await authApi.login({ email, password });
+    if ('mfa_required' in res && res.mfa_required) {
+      return { mfa_required: true, temp_token: res.temp_token };
+    }
+    if ('user' in res) {
+      setUser(res.user);
+    }
+    return {};
   };
 
   const logout = () => {
@@ -59,7 +59,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         loading,
         login,
-        register,
         logout,
         refreshUser,
         isAdmin: user?.role === 'admin',

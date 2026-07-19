@@ -29,6 +29,7 @@ const EMPTY_FORM = {
   tags: '',
   category_id: 0,
   is_published: false,
+  is_premium: false,
 };
 
 export function AdminChallengeFormPage() {
@@ -59,6 +60,7 @@ export function AdminChallengeFormPage() {
           tags: challenge.tags ?? '',
           category_id: challenge.category_id,
           is_published: challenge.is_published,
+          is_premium: challenge.is_premium,
         });
         setTasks(
           (challenge.tasks ?? []).map((t) => ({
@@ -256,6 +258,15 @@ export function AdminChallengeFormPage() {
                     style={{ width: 14, height: 14 }}
                   />
                   Publish immediately
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginTop: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.is_premium}
+                    onChange={(e) => setField('is_premium', e.target.checked)}
+                    style={{ width: 14, height: 14 }}
+                  />
+                  <span style={{ color: '#a78bfa', fontWeight: 600 }}>⭐ Premium only</span>
                 </label>
               </div>
             </div>

@@ -1,12 +1,14 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Shield, LayoutDashboard, Target, Trophy, User,
-  Settings, LogOut, Users, BookOpen, BarChart3
+  Settings, LogOut, Users, BookOpen, BarChart3, Crown, ToggleRight
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useSettings } from '../../context/SettingsContext';
 
 export function Sidebar() {
   const { user, isAdmin, logout } = useAuth();
+  const { settings } = useSettings();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -43,14 +45,30 @@ export function Sidebar() {
           Challenges
         </NavLink>
 
-        <NavLink to="/leaderboard" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-          <Trophy size={16} />
-          Leaderboard
-        </NavLink>
+        {settings.leaderboard_enabled && (
+          <NavLink to="/leaderboard" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <Trophy size={16} />
+            Leaderboard
+          </NavLink>
+        )}
 
         <NavLink to="/profile" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
           <User size={16} />
           Profile
+        </NavLink>
+
+        {/* Premium link — styled differently for non-premium users */}
+        <NavLink
+          to="/premium"
+          className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+          style={({ isActive }) =>
+            !user?.is_premium && !isActive
+              ? { color: '#a78bfa', fontWeight: 600 }
+              : {}
+          }
+        >
+          <Crown size={16} style={{ color: user?.is_premium ? '#a78bfa' : undefined }} />
+          {user?.is_premium ? 'Premium ✓' : 'Upgrade to Premium'}
         </NavLink>
 
         {isAdmin && (
@@ -76,6 +94,11 @@ export function Sidebar() {
               <Settings size={16} />
               Categories
             </NavLink>
+
+            <NavLink to="/admin/settings" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+              <ToggleRight size={16} />
+              Site Settings
+            </NavLink>
           </>
         )}
       </nav>
@@ -91,7 +114,10 @@ export function Sidebar() {
           </div>
           <div className="sidebar-user-info">
             <div className="sidebar-username">{user?.username}</div>
-            <div className="sidebar-role">{user?.role}</div>
+            <div className="sidebar-role" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {user?.is_premium && <Crown size={10} style={{ color: '#a78bfa' }} />}
+              {user?.is_premium ? 'premium' : user?.role}
+            </div>
           </div>
           <button
             className="btn btn-ghost btn-icon"

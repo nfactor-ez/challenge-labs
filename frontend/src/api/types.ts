@@ -7,6 +7,10 @@ export interface User {
   role: 'user' | 'admin';
   avatar_url?: string;
   created_at: string;
+  mfa_enabled: boolean;
+  is_premium: boolean;
+  premium_granted_at?: string;
+  premium_expires_at?: string;
 }
 
 export interface Category {
@@ -40,6 +44,7 @@ export interface Challenge {
   docker_image: string;
   tags: string;
   is_published: boolean;
+  is_premium: boolean;
   category_id: number;
   category?: Category;
   tasks?: Task[];

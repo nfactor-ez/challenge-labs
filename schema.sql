@@ -23,12 +23,33 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT         NOT NULL,
     role          VARCHAR(20)  NOT NULL DEFAULT 'user'
                     CHECK (role IN ('user', 'admin')),
-    avatar_url    VARCHAR(500)
+    avatar_url    VARCHAR(500),
+
+    -- MFA (TOTP — Google Authenticator compatible)
+    mfa_enabled     BOOLEAN NOT NULL DEFAULT FALSE,
+    mfa_totp_secret VARCHAR(64)
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_deleted_at  ON users(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_users_username     ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_email        ON users(email);
+
+-- ─── OTP Codes ────────────────────────────────────────────────────────────────
+-- Email one-time codes for registration and forgot-password verification.
+CREATE TABLE IF NOT EXISTS otp_codes (
+    id         BIGSERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    email      VARCHAR(255) NOT NULL,
+    code_hash  TEXT         NOT NULL, -- bcrypt hash of the 6-digit code
+    purpose    VARCHAR(30)  NOT NULL
+                 CHECK (purpose IN ('registration', 'forgot_password')),
+    expires_at TIMESTAMPTZ NOT NULL,
+    used       BOOLEAN     NOT NULL DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_otp_codes_email   ON otp_codes(email);
+CREATE INDEX IF NOT EXISTS idx_otp_codes_purpose ON otp_codes(purpose);
 
 -- ─── Categories ───────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS categories (

@@ -20,6 +20,15 @@ type User struct {
 	Role         string `gorm:"default:user;size:20" json:"role"` // user | admin
 	AvatarURL    string `gorm:"size:500" json:"avatar_url,omitempty"`
 
+	// MFA (TOTP — Google Authenticator compatible)
+	MFAEnabled    bool   `gorm:"default:false" json:"mfa_enabled"`
+	MFATOTPSecret string `gorm:"size:64" json:"-"` // base32 TOTP secret, never exposed
+
+	// Subscription
+	IsPremium         bool       `gorm:"default:false" json:"is_premium"`
+	PremiumGrantedAt  *time.Time `gorm:"index" json:"premium_granted_at,omitempty"`
+	PremiumExpiresAt  *time.Time `gorm:"index" json:"premium_expires_at,omitempty"`
+
 	Sessions []Session `gorm:"foreignKey:UserID" json:"-"`
 }
 
@@ -59,6 +68,7 @@ type Challenge struct {
 	Flag        string     `gorm:"not null;size:500" json:"-"` // stored bcrypt-hashed
 	Tags        string     `gorm:"size:500" json:"tags"`       // comma-separated
 	IsPublished bool       `gorm:"default:false" json:"is_published"`
+	IsPremium   bool       `gorm:"default:false" json:"is_premium"` // requires premium subscription
 	CategoryID  uint       `json:"category_id"`
 	Category    Category   `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
 	Tasks       []Task     `gorm:"foreignKey:ChallengeID;constraint:OnDelete:CASCADE" json:"tasks,omitempty"`
@@ -132,4 +142,24 @@ type UserProgress struct {
 	FlagSubmitted bool     `gorm:"default:false" json:"flag_submitted"`
 	PointsAwarded int      `gorm:"default:0" json:"points_awarded"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
+}
+
+// ─── SiteSetting ──────────────────────────────────────────────────────────────
+// Stores global admin-configurable settings as key-value pairs.
+
+type SiteSetting struct {
+	Key   string `gorm:"primaryKey;size:100" json:"key"`
+	Value string `gorm:"not null;size:500"   json:"value"`
+}
+
+
+type OTPCode struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+
+	Email     string    `gorm:"not null;size:255;index" json:"email"`
+	CodeHash  string    `gorm:"not null;size:256" json:"-"` // bcrypt hash of the 6-digit code
+	Purpose   string    `gorm:"not null;size:30" json:"purpose"` // "registration" | "forgot_password"
+	ExpiresAt time.Time `gorm:"not null" json:"expires_at"`
+	Used      bool      `gorm:"default:false" json:"used"`
 }

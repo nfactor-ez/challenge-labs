@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User, Lock, Save, AlertCircle } from 'lucide-react';
+import { User, Lock, Save, AlertCircle, Smartphone, QrCode, ShieldCheck, ShieldOff } from 'lucide-react';
 import { AppShell } from '../components/layout/AppShell';
 import { TopBar } from '../components/layout/TopBar';
 import { Spinner } from '../components/ui';
@@ -12,14 +12,31 @@ export function ProfilePage() {
   const { user, refreshUser } = useAuth();
   const { toast } = useToast();
 
+  // ── Profile form ──────────────────────────────────────────────────────────
   const [username, setUsername] = useState(user?.username ?? '');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url ?? '');
   const [profileLoading, setProfileLoading] = useState(false);
 
+  // ── Change password form ──────────────────────────────────────────────────
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [pwLoading, setPwLoading] = useState(false);
   const [pwError, setPwError] = useState('');
+
+  // ── MFA setup state ───────────────────────────────────────────────────────
+  const [mfaSetupLoading, setMfaSetupLoading] = useState(false);
+  const [mfaSecret, setMfaSecret] = useState('');
+  const [mfaOtpAuthURL, setMfaOtpAuthURL] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaCodeLoading, setMfaCodeLoading] = useState(false);
+  const [mfaError, setMfaError] = useState('');
+  const [showMfaSetup, setShowMfaSetup] = useState(false);
+
+  // ── MFA disable state ─────────────────────────────────────────────────────
+  const [mfaDisableCode, setMfaDisableCode] = useState('');
+  const [mfaDisableLoading, setMfaDisableLoading] = useState(false);
+  const [mfaDisableError, setMfaDisableError] = useState('');
+  const [showMfaDisable, setShowMfaDisable] = useState(false);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +66,60 @@ export function ProfilePage() {
       setPwError(err instanceof ApiError ? err.message : 'Failed to change password');
     } finally {
       setPwLoading(false);
+    }
+  };
+
+  // MFA setup — generate secret
+  const handleMFASetup = async () => {
+    setMfaSetupLoading(true);
+    setMfaError('');
+    try {
+      const res = await authApi.mfaSetup();
+      setMfaSecret(res.secret);
+      setMfaOtpAuthURL(res.otpauth_url);
+      setShowMfaSetup(true);
+    } catch (err) {
+      setMfaError(err instanceof ApiError ? err.message : 'Failed to start MFA setup');
+    } finally {
+      setMfaSetupLoading(false);
+    }
+  };
+
+  // MFA enable — confirm with TOTP code
+  const handleMFAEnable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMfaCodeLoading(true);
+    setMfaError('');
+    try {
+      await authApi.mfaEnable({ code: mfaCode });
+      await refreshUser();
+      toast.success('Two-factor authentication enabled');
+      setShowMfaSetup(false);
+      setMfaCode('');
+      setMfaSecret('');
+      setMfaOtpAuthURL('');
+    } catch (err) {
+      setMfaError(err instanceof ApiError ? err.message : 'Failed to enable MFA');
+    } finally {
+      setMfaCodeLoading(false);
+    }
+  };
+
+  // MFA disable
+  const handleMFADisable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMfaDisableLoading(true);
+    setMfaDisableError('');
+    try {
+      await authApi.mfaDisable({ code: mfaDisableCode });
+      await refreshUser();
+      toast.success('Two-factor authentication disabled');
+      setShowMfaDisable(false);
+      setMfaDisableCode('');
+    } catch (err) {
+      setMfaDisableError(err instanceof ApiError ? err.message : 'Failed to disable MFA');
+    } finally {
+      setMfaDisableLoading(false);
     }
   };
 
@@ -102,6 +173,14 @@ export function ProfilePage() {
             >
               {user?.role}
             </div>
+            {user?.mfa_enabled && (
+              <div
+                className="badge"
+                style={{ marginTop: 8, background: 'var(--success-bg)', color: 'var(--success-text)', display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}
+              >
+                <ShieldCheck size={11} /> MFA enabled
+              </div>
+            )}
             <div className="divider" />
             <div className="text-xs text-muted">
               Member since {new Date(user?.created_at ?? '').toLocaleDateString()}
@@ -207,6 +286,192 @@ export function ProfilePage() {
                   </button>
                 </div>
               </form>
+            </div>
+
+            {/* Two-Factor Authentication */}
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">
+                  <Smartphone size={14} style={{ display: 'inline', marginRight: 6 }} />
+                  Two-Factor Authentication
+                </span>
+                <div>
+                  {user?.mfa_enabled ? (
+                    <span className="badge" style={{ background: 'var(--success-bg)', color: 'var(--success-text)', fontSize: 11 }}>
+                      Enabled
+                    </span>
+                  ) : (
+                    <span className="badge badge-muted" style={{ fontSize: 11 }}>Disabled</span>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-sm text-muted" style={{ marginBottom: 16 }}>
+                Use an authenticator app (Google Authenticator, Authy, etc.) for extra security when signing in.
+              </p>
+
+              {/* MFA Setup flow */}
+              {!user?.mfa_enabled && !showMfaSetup && (
+                <>
+                  {mfaError && (
+                    <div className="flag-result flag-result-wrong" style={{ marginBottom: 12 }}>
+                      <AlertCircle size={14} />
+                      {mfaError}
+                    </div>
+                  )}
+                  <button
+                    id="enable-mfa"
+                    className="btn btn-primary"
+                    onClick={handleMFASetup}
+                    disabled={mfaSetupLoading}
+                  >
+                    {mfaSetupLoading ? <Spinner size="sm" /> : <><QrCode size={14} /> Set up Authenticator</>}
+                  </button>
+                </>
+              )}
+
+              {!user?.mfa_enabled && showMfaSetup && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div
+                    style={{
+                      background: 'var(--bg-overlay)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 10,
+                      padding: 16,
+                    }}
+                  >
+                    <p className="text-sm" style={{ marginBottom: 10, fontWeight: 600 }}>
+                      1. Scan this QR code with your authenticator app:
+                    </p>
+                    {/* QR code rendered via Google Charts API */}
+                    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(mfaOtpAuthURL)}`}
+                        alt="QR code for authenticator"
+                        style={{ borderRadius: 8, border: '4px solid white' }}
+                      />
+                    </div>
+                    <p className="text-sm text-muted" style={{ marginBottom: 4 }}>
+                      Or enter this secret manually:
+                    </p>
+                    <code
+                      style={{
+                        display: 'block',
+                        background: 'var(--bg-base)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        padding: '8px 12px',
+                        fontSize: '0.8rem',
+                        letterSpacing: 3,
+                        wordBreak: 'break-all',
+                        color: 'var(--accent)',
+                      }}
+                    >
+                      {mfaSecret}
+                    </code>
+                  </div>
+
+                  <form onSubmit={handleMFAEnable} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <p className="text-sm" style={{ fontWeight: 600 }}>
+                      2. Enter the 6-digit code from your app to confirm:
+                    </p>
+                    {mfaError && (
+                      <div className="flag-result flag-result-wrong">
+                        <AlertCircle size={14} />
+                        {mfaError}
+                      </div>
+                    )}
+                    <div className="form-group">
+                      <input
+                        id="mfa-enable-code"
+                        type="text"
+                        className="input font-mono"
+                        placeholder="000000"
+                        value={mfaCode}
+                        onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        required
+                        maxLength={6}
+                        autoComplete="one-time-code"
+                        style={{ letterSpacing: 8, fontSize: '1.2rem', textAlign: 'center' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => { setShowMfaSetup(false); setMfaCode(''); setMfaError(''); }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        id="confirm-mfa-enable"
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={mfaCodeLoading || mfaCode.length !== 6}
+                      >
+                        {mfaCodeLoading ? <Spinner size="sm" /> : <><ShieldCheck size={14} /> Enable MFA</>}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* MFA Disable flow */}
+              {user?.mfa_enabled && !showMfaDisable && (
+                <button
+                  id="disable-mfa"
+                  className="btn btn-danger"
+                  onClick={() => setShowMfaDisable(true)}
+                >
+                  <ShieldOff size={14} /> Disable MFA
+                </button>
+              )}
+
+              {user?.mfa_enabled && showMfaDisable && (
+                <form onSubmit={handleMFADisable} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <p className="text-sm text-muted">
+                    Enter a code from your authenticator app to confirm disabling MFA.
+                  </p>
+                  {mfaDisableError && (
+                    <div className="flag-result flag-result-wrong">
+                      <AlertCircle size={14} />
+                      {mfaDisableError}
+                    </div>
+                  )}
+                  <div className="form-group">
+                    <label htmlFor="mfa-disable-code">Authenticator Code</label>
+                    <input
+                      id="mfa-disable-code"
+                      type="text"
+                      className="input font-mono"
+                      placeholder="000000"
+                      value={mfaDisableCode}
+                      onChange={(e) => setMfaDisableCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      required
+                      maxLength={6}
+                      autoComplete="one-time-code"
+                      style={{ letterSpacing: 8, fontSize: '1.1rem', textAlign: 'center' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => { setShowMfaDisable(false); setMfaDisableCode(''); setMfaDisableError(''); }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      id="confirm-mfa-disable"
+                      type="submit"
+                      className="btn btn-danger"
+                      disabled={mfaDisableLoading || mfaDisableCode.length !== 6}
+                    >
+                      {mfaDisableLoading ? <Spinner size="sm" /> : <><ShieldOff size={14} /> Disable MFA</>}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>

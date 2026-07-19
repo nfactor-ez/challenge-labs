@@ -17,6 +17,7 @@ type Config struct {
 	Docker DockerConfig
 	WS     WSConfig
 	CORS   CORSConfig
+	SMTP   SMTPConfig
 	// Store selects the session persistence backend.
 	// "memory" — in-process store, no PostgreSQL required (development/test)
 	// "postgres" — PostgreSQL-backed store via GORM (default)
@@ -59,6 +60,15 @@ type CORSConfig struct {
 	AllowedOrigins []string
 }
 
+type SMTPConfig struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
+	From     string
+	APIKey   string // Brevo REST API key (xkeysib-...) — set via BREVO_API_KEY env var
+}
+
 // Load reads configuration from environment (and an optional .env file).
 func Load() (*Config, error) {
 	// Load .env file if present; ignore error (won't exist in production)
@@ -95,6 +105,13 @@ func Load() (*Config, error) {
 	cfg.CORS.AllowedOrigins = strings.Split(originsRaw, ",")
 
 	cfg.Store = getEnv("STORE", "postgres")
+
+	cfg.SMTP.Host = getEnv("SMTP_HOST", "smtp-relay.brevo.com")
+	cfg.SMTP.Port = getEnv("SMTP_PORT", "587")
+	cfg.SMTP.User = getEnv("SMTP_USER", "")
+	cfg.SMTP.Password = getEnv("SMTP_PASSWORD", "")
+	cfg.SMTP.From = getEnv("SMTP_FROM", "noreply@challengelabs.io")
+	cfg.SMTP.APIKey = getEnv("BREVO_API_KEY", "")
 
 	return cfg, nil
 }

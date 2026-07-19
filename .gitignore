@@ -26,3 +26,6 @@ docker-compose.override.yml
 
 # Ignore env files except the main .env included for POC
 .env.*
+
+# Ignore main .env (contains secrets)
+.env

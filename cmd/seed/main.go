@@ -49,6 +49,7 @@ func main() {
 	// Auto-migrate all models
 	if err = db.AutoMigrate(
 		&models.User{},
+		&models.OTPCode{},
 		&models.Category{},
 		&models.Challenge{},
 		&models.Task{},
@@ -83,8 +84,6 @@ func seedAdmin(db *gorm.DB) {
 		fmt.Println("  Admin user already exists — skipped")
 	}
 }
-
-// ─── Categories ───────────────────────────────────────────────────────────────
 
 type categoryDef struct {
 	Name        string

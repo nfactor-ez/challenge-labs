@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 
 	"challengelabs/backend/internal/repository"
 	"challengelabs/backend/internal/session"
@@ -67,20 +68,24 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 
 	// Strip password hashes from the response
 	type userEntry struct {
-		ID        uint   `json:"id"`
-		Username  string `json:"username"`
-		Email     string `json:"email"`
-		Role      string `json:"role"`
-		AvatarURL string `json:"avatar_url"`
+		ID         uint   `json:"id"`
+		Username   string `json:"username"`
+		Email      string `json:"email"`
+		Role       string `json:"role"`
+		AvatarURL  string `json:"avatar_url"`
+		MFAEnabled bool   `json:"mfa_enabled"`
+		CreatedAt  string `json:"created_at"`
 	}
 	entries := make([]userEntry, len(users))
 	for i, u := range users {
 		entries[i] = userEntry{
-			ID:        u.ID,
-			Username:  u.Username,
-			Email:     u.Email,
-			Role:      u.Role,
-			AvatarURL: u.AvatarURL,
+			ID:         u.ID,
+			Username:   u.Username,
+			Email:      u.Email,
+			Role:       u.Role,
+			AvatarURL:  u.AvatarURL,
+			MFAEnabled: u.MFAEnabled,
+			CreatedAt:  u.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		}
 	}
 
@@ -138,4 +143,39 @@ func (h *AdminHandler) SetRole(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"user": userResponse(user)})
+}
+
+// ─── SetUserPassword ──────────────────────────────────────────────────────────
+
+// SetUserPassword allows an admin to reset any user's password without knowing the current one.
+// PATCH /api/v1/admin/users/:id/password
+func (h *AdminHandler) SetUserPassword(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	var body struct {
+		NewPassword string `json:"new_password" binding:"required,min=8,max=128"`
+	}
+	if err = c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	user, _ := h.userRepo.FindByID(uint(id))
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(body.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		return
+	}
+	if err = h.userRepo.UpdatePassword(uint(id), string(hash)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "password updated successfully"})
 }

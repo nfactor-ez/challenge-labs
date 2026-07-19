@@ -12,6 +12,7 @@ import (
 	"challengelabs/backend/internal/auth"
 	"challengelabs/backend/internal/container"
 	"challengelabs/backend/internal/middleware"
+	"challengelabs/backend/internal/otp"
 	"challengelabs/backend/internal/repository"
 	"challengelabs/backend/internal/session"
 	"challengelabs/backend/internal/ws"
@@ -32,6 +33,8 @@ func NewRouter(
 	progressRepo *repository.ProgressRepository,
 	containerMgr *container.Manager,
 	hub *ws.Hub,
+	otpSvc *otp.Service,
+	settingsRepo *repository.SettingsRepository,
 ) *gin.Engine {
 	if cfg.Server.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -63,23 +66,47 @@ func NewRouter(
 	})
 
 	// ── Handlers ─────────────────────────────────────────────────────
-	authH      := NewAuthHandler(userRepo, jwtSvc)
-	challengeH := NewChallengeHandler(challengeRepo, progressRepo)
+	authH      := NewAuthHandler(userRepo, jwtSvc, otpSvc)
+	challengeH := NewChallengeHandler(challengeRepo, progressRepo, userRepo)
 	categoryH  := NewCategoryHandler(categoryRepo)
 	sessionH   := NewSessionHandler(store, challengeRepo, containerMgr, cfg)
 	terminalH  := NewTerminalHandler(store, containerMgr, hub, cfg)
 	adminH     := NewAdminHandler(userRepo, challengeRepo, store)
+	mfaH       := NewMFAHandler(userRepo)
+	premiumH   := NewPremiumHandler(userRepo)
+	settingsH  := NewSettingsHandler(settingsRepo)
 
 	// ── Rate limiters ─────────────────────────────────────────────────────
 	authLimiter := middleware.RateLimit(10, time.Minute)
 	apiLimiter  := middleware.RateLimit(120, time.Minute)
 
+	// ── Public settings (feature flags — no auth required) ───────────────
+	if settingsRepo != nil {
+		r.GET("/api/v1/settings", settingsH.PublicSettings)
+	} else {
+		// Fallback: all features enabled when DB not available
+		r.GET("/api/v1/settings", func(c *gin.Context) {
+			c.JSON(200, gin.H{"leaderboard_enabled": true})
+		})
+	}
+
 	// ── Public auth ───────────────────────────────────────────────────────
 	authGroup := r.Group("/api/v1/auth")
 	authGroup.Use(authLimiter)
 	{
-		authGroup.POST("/register", authH.Register)
+		// Registration (2-step)
+		authGroup.POST("/register/request", authH.RegisterRequest)
+		authGroup.POST("/register/verify", authH.RegisterVerify)
+
+		// Login
 		authGroup.POST("/login", authH.Login)
+
+		// MFA second-step login (public — uses temp token)
+		authGroup.POST("/mfa/login-verify", authH.MFALoginVerify)
+
+		// Forgot password (2-step)
+		authGroup.POST("/forgot-password/request", authH.ForgotPasswordRequest)
+		authGroup.POST("/forgot-password/verify", authH.ForgotPasswordVerify)
 	}
 
 	// ── Authenticated REST API ────────────────────────────────────────────
@@ -90,6 +117,14 @@ func NewRouter(
 		api.PUT("/auth/password", authH.ChangePassword)
 		api.PATCH("/auth/me", authH.UpdateProfile)
 
+		// MFA management (requires full JWT)
+		api.POST("/auth/mfa/setup", mfaH.Setup)
+		api.POST("/auth/mfa/enable", mfaH.Enable)
+		api.POST("/auth/mfa/disable", mfaH.Disable)
+
+		// Premium subscription
+		api.GET("/premium/status", premiumH.Status)
+		api.POST("/premium/request", premiumH.Request) // placeholder — payment gateway hooks later
 		api.GET("/categories", categoryH.List)
 
 		api.GET("/challenges", challengeH.List)
@@ -113,12 +148,18 @@ func NewRouter(
 			admin.GET("/users", adminH.ListUsers)
 			admin.GET("/users/:id", adminH.GetUser)
 			admin.PATCH("/users/:id/role", adminH.SetRole)
+			admin.PATCH("/users/:id/password", adminH.SetUserPassword)
+			admin.PATCH("/users/:id/premium", premiumH.AdminSet) // grant/revoke premium
 			admin.POST("/challenges", challengeH.Create)
 			admin.PUT("/challenges/:id", challengeH.Update)
 			admin.DELETE("/challenges/:id", challengeH.Delete)
 			admin.POST("/categories", categoryH.Create)
 			admin.PUT("/categories/:id", categoryH.Update)
 			admin.DELETE("/categories/:id", categoryH.Delete)
+			if settingsRepo != nil {
+				admin.GET("/settings", settingsH.List)
+				admin.PATCH("/settings/:key", settingsH.Update)
+			}
 		}
 	}
 

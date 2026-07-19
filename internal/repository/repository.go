@@ -66,6 +66,93 @@ func (r *UserRepository) CountAll() (int64, error) {
 	return count, r.db.Model(&models.User{}).Count(&count).Error
 }
 
+// UpdateMFA persists the MFA enabled state and TOTP secret for a user.
+func (r *UserRepository) UpdateMFA(userID uint, enabled bool, secret string) error {
+	return r.db.Model(&models.User{}).Where("id = ?", userID).
+		Updates(map[string]interface{}{
+			"mfa_enabled":     enabled,
+			"mfa_totp_secret": secret,
+		}).Error
+}
+
+// UpdatePassword sets a new bcrypt-hashed password for a user.
+func (r *UserRepository) UpdatePassword(userID uint, passwordHash string) error {
+	return r.db.Model(&models.User{}).Where("id = ?", userID).
+		Update("password_hash", passwordHash).Error
+}
+
+// UpdatePremium grants or revokes a user's premium subscription.
+func (r *UserRepository) UpdatePremium(userID uint, isPremium bool, grantedAt, expiresAt *time.Time) error {
+	return r.db.Model(&models.User{}).Where("id = ?", userID).
+		Updates(map[string]interface{}{
+			"is_premium":          isPremium,
+			"premium_granted_at":  grantedAt,
+			"premium_expires_at":  expiresAt,
+		}).Error
+}
+
+// ─── OTP Repository ───────────────────────────────────────────────────────────
+
+type OTPRepository struct{ db *gorm.DB }
+
+func NewOTPRepository(db *gorm.DB) *OTPRepository { return &OTPRepository{db: db} }
+
+func (r *OTPRepository) Create(o *models.OTPCode) error {
+	return r.db.Create(o).Error
+}
+
+// FindValid returns the most recent unused, non-expired OTP for a given email+purpose.
+func (r *OTPRepository) FindValid(email, purpose string) (*models.OTPCode, error) {
+	var o models.OTPCode
+	err := r.db.Where(
+		"email = ? AND purpose = ? AND used = false AND expires_at > ?",
+		email, purpose, time.Now(),
+	).Order("created_at DESC").First(&o).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &o, err
+}
+
+// MarkUsed sets the used flag on a code so it cannot be replayed.
+func (r *OTPRepository) MarkUsed(id uint) error {
+	return r.db.Model(&models.OTPCode{}).Where("id = ?", id).
+		Update("used", true).Error
+}
+
+// InvalidatePrevious marks all existing OTPs for email+purpose as used (prevents replay).
+func (r *OTPRepository) InvalidatePrevious(email, purpose string) error {
+	return r.db.Model(&models.OTPCode{}).
+		Where("email = ? AND purpose = ? AND used = false", email, purpose).
+		Update("used", true).Error
+}
+
+// ─── Settings Repository ───────────────────────────────────────────────────────
+
+type SettingsRepository struct{ db *gorm.DB }
+
+func NewSettingsRepository(db *gorm.DB) *SettingsRepository { return &SettingsRepository{db: db} }
+
+// Get retrieves a setting value by key, returning the fallback if not found.
+func (r *SettingsRepository) Get(key, fallback string) string {
+	var s models.SiteSetting
+	if err := r.db.First(&s, "key = ?", key).Error; err != nil {
+		return fallback
+	}
+	return s.Value
+}
+
+// Set upserts a setting value.
+func (r *SettingsRepository) Set(key, value string) error {
+	return r.db.Save(&models.SiteSetting{Key: key, Value: value}).Error
+}
+
+// All returns every stored setting.
+func (r *SettingsRepository) All() ([]models.SiteSetting, error) {
+	var settings []models.SiteSetting
+	return settings, r.db.Find(&settings).Error
+}
+
 // ─── Challenge Repository ─────────────────────────────────────────────────────
 
 type ChallengeRepository struct{ db *gorm.DB }
