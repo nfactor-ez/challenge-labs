@@ -59,10 +59,10 @@ services:
       ALLOWED_ORIGINS:                 http://localhost:3000,http://localhost:5173,http://localhost:5174
       SMTP_HOST:                       smtp-relay.brevo.com
       SMTP_PORT:                       587
-      SMTP_USER:                       your-smtp-user@smtp-brevo.com
-      SMTP_PASSWORD:                   your-smtp-password-here
-      SMTP_FROM:                       your-email@yourdomain.com
-      BREVO_API_KEY:                   your-brevo-api-key-here
+      SMTP_USER:                       ${SMTP_USER:-}
+      SMTP_PASSWORD:                   ${SMTP_PASSWORD:-}
+      SMTP_FROM:                       ${SMTP_FROM:-noreply@challengelabs.io}
+      BREVO_API_KEY:                   ${BREVO_API_KEY:-}
     ports:
       - "8081:8080"
     volumes:
